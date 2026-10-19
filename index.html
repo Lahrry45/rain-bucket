@@ -24,29 +24,41 @@
   </div>
 
   <div class="hud" id="hud" hidden>
-    <div class="stat"><span>Drops</span><b id="hud-drops">0</b></div>
+    <div class="stat"><span>Points</span><b id="hud-points">0</b></div>
+    <div class="stat combo" id="hud-combo-stat"><span>Combo</span><b id="hud-combo">–</b></div>
     <div class="stat"><span>Time</span><b id="hud-time">0:00</b></div>
     <div class="stat lives"><span>Lives</span><b id="hud-lives">❤❤❤</b></div>
   </div>
+
+  <div class="powers" id="powers"></div>
 
   <div class="flash" id="flash"></div>
 
   <section class="panel" id="menu">
     <h1>Rain Bucket</h1>
     <p class="tagline">It's raining on the rooftop. Catch every drop you can, and stay away from the lightning.</p>
+    <button class="primary" id="start-btn">Play</button>
+    <p class="best" id="menu-best"></p>
     <ul class="howto">
       <li><i class="dot blue"></i> Raindrop: +1</li>
       <li><i class="dot gold"></i> Golden drop: +5</li>
       <li><i class="dot bolt"></i> Lightning: lose a life</li>
     </ul>
+    <h3>Bonuses</h3>
+    <ul class="bonuses">
+      <li><b>Combo</b> Keep catching to multiply points: ×2 at 10, ×3 at 25, ×4 at 50</li>
+      <li><b>Bucket full</b> Every 40 drops: +25 and the bucket empties</li>
+      <li><b>❤ Heart</b> Get a life back</li>
+      <li><b>🛡 Shield</b> Lightning bounces off you (+3 each)</li>
+      <li><b>🪣 Big bucket</b> A wider bucket for 8 seconds</li>
+      <li><b>⭐ Star</b> Double points for 8 seconds</li>
+    </ul>
     <p class="controls">Move with <kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd>, or drag your finger / mouse.</p>
-    <button class="primary" id="start-btn">Play</button>
-    <p class="best" id="menu-best"></p>
   </section>
 
   <section class="panel" id="over" hidden>
     <h2>Game over</h2>
-    <p class="result"><b id="over-drops">0</b> drops in <b id="over-time">0:00</b></p>
+    <p class="result"><b id="over-points">0</b> points in <b id="over-time">0:00</b></p>
     <p class="saved" id="over-saved"></p>
     <button class="primary" id="again-btn">Play again</button>
     <h3>Leaderboard</h3>

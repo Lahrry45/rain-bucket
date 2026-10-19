@@ -143,7 +143,8 @@ function setPlayer(next) {
   character = buildCharacter(player.style);
   character.position.x = x;
   scene.add(character);
-  setWaterLevel(character, drops / 60);
+  setWaterLevel(character, fill / FILL_FULL);
+  setBigBucket(powers.bigbucket > 0);
 }
 
 let lastAsk = 0;
@@ -188,6 +189,58 @@ function makeDrop(material, scale) {
   return g;
 }
 
+// Bonus pickups
+const heartGeo = (() => {
+  const s = new THREE.Shape();
+  s.moveTo(0, -0.22);
+  s.bezierCurveTo(-0.05, -0.15, -0.3, 0.0, -0.22, 0.16);
+  s.bezierCurveTo(-0.15, 0.28, -0.02, 0.24, 0, 0.12);
+  s.bezierCurveTo(0.02, 0.24, 0.15, 0.28, 0.22, 0.16);
+  s.bezierCurveTo(0.3, 0.0, 0.05, -0.15, 0, -0.22);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.1, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
+  g.translate(0, 0, -0.05);
+  return g;
+})();
+const starGeo = (() => {
+  const s = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 0.11 : 0.26;
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    if (i === 0) s.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else s.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.08, bevelEnabled: false });
+  g.translate(0, 0, -0.04);
+  return g;
+})();
+const heartMat = new THREE.MeshStandardMaterial({ color: '#ff4d6d', emissive: '#99112b', roughness: 0.3 });
+const starMat = new THREE.MeshStandardMaterial({ color: '#c77dff', emissive: '#6a1fb0', roughness: 0.3 });
+const shieldItemMat = new THREE.MeshStandardMaterial({ color: '#4dffc3', emissive: '#0f8a63', roughness: 0.2, transparent: true, opacity: 0.9 });
+const bigBucketMat = new THREE.MeshStandardMaterial({ color: '#ff9f43', emissive: '#8a4a00', roughness: 0.35 });
+
+function makePickup(kind) {
+  if (kind === 'heart') return new THREE.Mesh(heartGeo, heartMat);
+  if (kind === 'double') return new THREE.Mesh(starGeo, starMat);
+  if (kind === 'shield') {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 1), shieldItemMat));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 6, 20), shieldItemMat);
+    ring.rotation.x = Math.PI / 2.4;
+    g.add(ring);
+    return g;
+  }
+  // big bucket: a little orange bucket
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.28, 14), bigBucketMat));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 6, 16), bigBucketMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.14;
+  g.add(rim);
+  return g;
+}
+
+const PICKUPS = ['heart', 'shield', 'bigbucket', 'double'];
 const items = [];
 const splashes = [];
 const splashGeo = new THREE.SphereGeometry(0.05, 6, 4);
@@ -198,13 +251,46 @@ function spawn() {
   let kind = 'drop';
   if (roll < boltChance) kind = 'bolt';
   else if (roll < boltChance + 0.08) kind = 'gold';
-  const mesh = kind === 'bolt' ? new THREE.Mesh(boltGeo, boltMat) : makeDrop(kind === 'gold' ? goldMat : blueMat, kind === 'gold' ? 1.35 : 1);
-  if (kind === 'bolt') mesh.scale.setScalar(1.2);
+  else if (elapsed > 8 && roll < boltChance + 0.08 + 0.06) {
+    // a bonus pickup; hearts only when a life is missing
+    const choices = lives < 3 ? PICKUPS : PICKUPS.filter((p) => p !== 'heart');
+    kind = choices[Math.floor(Math.random() * choices.length)];
+  }
+  let mesh;
+  if (kind === 'bolt') { mesh = new THREE.Mesh(boltGeo, boltMat); mesh.scale.setScalar(1.2); }
+  else if (kind === 'drop' || kind === 'gold') mesh = makeDrop(kind === 'gold' ? goldMat : blueMat, kind === 'gold' ? 1.35 : 1);
+  else mesh = makePickup(kind);
   mesh.position.set((Math.random() * 2 - 1) * playHalf, 10, 0);
   scene.add(mesh);
-  const speed = Math.min(9.5, 3.2 + elapsed * 0.07) * (0.85 + Math.random() * 0.3) * (kind === 'bolt' ? 1.1 : 1);
+  const speed = Math.min(9.5, 3.2 + elapsed * 0.07) * (0.85 + Math.random() * 0.3) * (kind === 'bolt' ? 1.1 : 1) * (PICKUPS.includes(kind) ? 0.8 : 1);
   items.push({ mesh, kind, speed });
 }
+
+// Floating "+5" style messages above the action
+const popLayer = document.createElement('div');
+popLayer.className = 'pop-layer';
+document.body.append(popLayer);
+const projected = new THREE.Vector3();
+function popup(text, x, y, color = '#fffefa', big = false) {
+  projected.set(x, y, 0).project(camera);
+  const el = document.createElement('div');
+  el.className = big ? 'pop big' : 'pop';
+  el.textContent = text;
+  el.style.color = color;
+  el.style.left = `${(projected.x + 1) / 2 * innerWidth}px`;
+  el.style.top = `${(1 - projected.y) / 2 * innerHeight}px`;
+  el.addEventListener('animationend', () => el.remove());
+  setTimeout(() => el.remove(), 2000); // in case the animation never runs (hidden tab)
+  popLayer.append(el);
+}
+
+// Shield bubble around the character
+const shieldBubble = new THREE.Mesh(
+  new THREE.SphereGeometry(1.5, 24, 16),
+  new THREE.MeshStandardMaterial({ color: '#4dffc3', emissive: '#0f8a63', transparent: true, opacity: 0.22, depthWrite: false }),
+);
+shieldBubble.visible = false;
+scene.add(shieldBubble);
 
 function splash(x, y, color, count = 10) {
   const m = new THREE.MeshBasicMaterial({ color, transparent: true });
@@ -284,28 +370,104 @@ resize();
 
 // ---------- Game state ----------
 let state = 'menu';
-let drops = 0;
+let points = 0;
 let lives = 3;
 let elapsed = 0;
 let spawnTimer = 0;
 let invulnerable = 0;
 let shake = 0;
+let combo = 0; // drops caught in a row
+let comboTimer = 0; // the combo breaks if nothing is caught before this runs out
+const COMBO_WINDOW = 3;
+let fill = 0; // drops in the bucket, empties for a bonus when full
+const FILL_FULL = 40;
+const BUCKET_FULL_BONUS = 25;
+const powers = { shield: 0, bigbucket: 0, double: 0 }; // seconds left on each power-up
+const POWER_TIME = { shield: 7, bigbucket: 8, double: 8 };
+const POWER_LABEL = { shield: '🛡 Shield', bigbucket: '🪣 Big bucket', double: '⭐ ×2 points' };
 
-const BEST_KEY = 'rain-bucket-best';
+const comboMultiplier = () => (combo >= 50 ? 4 : combo >= 25 ? 3 : combo >= 10 ? 2 : 1);
+
+const BEST_KEY = 'rain-bucket-best-points';
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } };
 const writeBest = (n) => { try { localStorage.setItem(BEST_KEY, String(n)); } catch {} };
 function showMenuBest() {
   const best = readBest();
-  $('menu-best').textContent = best ? `Your best on this device: ${best} drops` : '';
+  $('menu-best').textContent = best ? `Your best on this device: ${best} points` : '';
 }
 showMenuBest();
 
 const formatTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 function updateHud() {
-  $('hud-drops').textContent = drops;
+  $('hud-points').textContent = points;
   $('hud-time').textContent = formatTime(elapsed);
-  $('hud-lives').textContent = '❤'.repeat(lives) + '♡'.repeat(3 - lives);
+  $('hud-lives').textContent = '❤'.repeat(lives) + '♡'.repeat(Math.max(0, 3 - lives));
+  const m = comboMultiplier();
+  $('hud-combo').textContent = m > 1 ? `×${m}` : combo ? `${combo}` : '–';
+  $('hud-combo-stat').classList.toggle('hot', m > 1);
+}
+
+function updatePowersHud() {
+  const active = Object.keys(powers).filter((k) => powers[k] > 0);
+  $('powers').replaceChildren(...active.map((k) => {
+    const el = document.createElement('div');
+    el.className = `power ${k}`;
+    el.textContent = `${POWER_LABEL[k]} ${Math.ceil(powers[k])}s`;
+    return el;
+  }));
+}
+
+function setBigBucket(on) {
+  const { bucket } = character.userData;
+  bucket.scale.set(on ? 1.7 : 1, 1, on ? 1.7 : 1);
+}
+
+function catchDrop(kind, x) {
+  combo += 1;
+  comboTimer = COMBO_WINDOW;
+  const base = kind === 'gold' ? 5 : 1;
+  const mult = comboMultiplier() * (powers.double > 0 ? 2 : 1);
+  const gained = base * mult;
+  points += gained;
+  splash(x, BUCKET_TOP, kind === 'gold' ? '#ffcc33' : '#7fd0ff', kind === 'gold' ? 14 : 6);
+  beep(kind === 'gold' ? 1046 : 520 + Math.min(combo, 60) * 6, 0.07, 'triangle', 0.12);
+  popup(`+${gained}`, x, BUCKET_TOP + 0.4, kind === 'gold' ? '#ffcc33' : mult > 1 ? '#d8fd71' : '#bfe6ff');
+  if ([10, 25, 50].includes(combo)) {
+    popup(`Combo ×${comboMultiplier()}!`, 0, 6.5, '#d8fd71', true);
+    beep(1320, 0.18, 'triangle', 0.14);
+  }
+  fill += kind === 'gold' ? 3 : 1;
+  if (fill >= FILL_FULL) {
+    fill = 0;
+    points += BUCKET_FULL_BONUS;
+    popup(`Bucket full! +${BUCKET_FULL_BONUS}`, 0, 6, '#7fd0ff', true);
+    splash(x, BUCKET_TOP + 0.2, '#7fd0ff', 30);
+    [784, 988, 1175].forEach((f, i) => setTimeout(() => beep(f, 0.12, 'triangle', 0.13), i * 90));
+  }
+  setWaterLevel(character, fill / FILL_FULL);
+  updateHud();
+}
+
+function catchPickup(kind, x) {
+  splash(x, BUCKET_TOP, '#ffffff', 16);
+  [660, 880, 1100].forEach((f, i) => setTimeout(() => beep(f, 0.09, 'sine', 0.13), i * 70));
+  if (kind === 'heart') {
+    if (lives < 3) { lives += 1; popup('+1 life ❤', x, BUCKET_TOP + 0.5, '#ff6b81', true); }
+    else { points += 10; popup('+10', x, BUCKET_TOP + 0.5, '#ff6b81'); }
+  } else {
+    powers[kind] = POWER_TIME[kind];
+    popup(POWER_LABEL[kind] + '!', x, BUCKET_TOP + 0.5, '#d8fd71', true);
+    if (kind === 'bigbucket') setBigBucket(true);
+  }
+  updateHud();
+  updatePowersHud();
+}
+
+function breakCombo() {
+  if (combo >= 10) popup('Combo lost', character.position.x, 1, '#ff9f9f');
+  combo = 0;
+  updateHud();
 }
 
 function startGame() {
@@ -314,11 +476,17 @@ function startGame() {
   }
   audio?.resume?.();
   clearItems();
-  drops = 0;
+  points = 0;
   lives = 3;
   elapsed = 0;
   spawnTimer = 0.4;
   invulnerable = 0;
+  combo = 0;
+  comboTimer = 0;
+  fill = 0;
+  for (const k in powers) powers[k] = 0;
+  setBigBucket(false);
+  updatePowersHud();
   character.position.x = 0;
   setWaterLevel(character, 0);
   state = 'playing';
@@ -333,9 +501,13 @@ async function gameOver() {
   beep(140, 0.5, 'sawtooth', 0.12);
   $('hud').hidden = true;
   $('over').hidden = false;
-  $('over-drops').textContent = drops;
+  $('over-points').textContent = points;
   $('over-time').textContent = formatTime(elapsed);
-  if (drops > readBest()) writeBest(drops);
+  for (const k in powers) powers[k] = 0;
+  shieldBubble.visible = false;
+  setBigBucket(false);
+  updatePowersHud();
+  if (points > readBest()) writeBest(points);
 
   const seconds = Math.floor(elapsed);
   const saved = $('over-saved');
@@ -352,7 +524,7 @@ async function gameOver() {
     saved.append(b);
   } else {
     saved.textContent = 'Saving…';
-    const res = await askStartNg({ type: 'startng:score', stats: { drops, seconds } }, 'startng:scoreSaved');
+    const res = await askStartNg({ type: 'startng:score', stats: { points, seconds } }, 'startng:scoreSaved');
     if (res?.ok) saved.textContent = res.result.improved ? `New best! You're #${res.result.rank}` : `Not your best this time (you're #${res.result.rank})`;
     else saved.textContent = res?.error || 'Could not save your score.';
   }
@@ -377,7 +549,7 @@ async function loadBoard() {
     const name = document.createElement('span');
     name.textContent = `#${e.rank} ${e.name}`;
     const score = document.createElement('span');
-    score.textContent = `${e.stats?.drops ?? e.score} drops · ${formatTime(e.stats?.seconds ?? 0)}`;
+    score.textContent = `${e.stats?.points ?? e.score} pts · ${formatTime(e.stats?.seconds ?? 0)}`;
     li.append(name, score);
     return li;
   }));
@@ -388,6 +560,7 @@ $('again-btn').onclick = startGame;
 
 function loseLife(x) {
   lives -= 1;
+  breakCombo();
   invulnerable = 1.2;
   shake = 0.35;
   splash(x, BUCKET_Y, '#fff35c', 14);
@@ -443,33 +616,53 @@ function tick() {
     }
 
     // falling things
+    if (combo > 0) {
+      comboTimer -= dt;
+      if (comboTimer <= 0) breakCombo();
+    }
+
+    // power-up timers
+    for (const k in powers) {
+      if (powers[k] <= 0) continue;
+      powers[k] = Math.max(0, powers[k] - dt);
+      if (powers[k] === 0 && k === 'bigbucket') setBigBucket(false);
+      if (Math.ceil(powers[k]) !== Math.ceil(powers[k] + dt)) updatePowersHud();
+    }
+    shieldBubble.visible = powers.shield > 0 && (powers.shield > 1.5 || Math.floor(t * 8) % 2 === 0);
+    shieldBubble.position.set(character.position.x, 1.75, 0);
+    shieldBubble.scale.setScalar(1 + Math.sin(t * 6) * 0.03);
+
     const cx = character.position.x;
+    const catchRadius = (powers.bigbucket > 0 ? BUCKET_RADIUS * 1.7 : BUCKET_RADIUS) + 0.08;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       it.mesh.position.y -= it.speed * dt;
-      if (it.kind === 'gold') it.mesh.rotation.y += dt * 4;
+      if (it.kind === 'gold' || PICKUPS.includes(it.kind)) it.mesh.rotation.y += dt * 4;
       if (it.kind === 'bolt') it.mesh.rotation.y = Math.sin(t * 20) * 0.3;
       const { x, y } = it.mesh.position;
       const dxItem = Math.abs(x - cx);
       let remove = false;
 
       if (it.kind === 'bolt') {
-        if (invulnerable <= 0 && y < BUCKET_TOP + 0.2 && y > 0.3 && dxItem < 0.45) {
+        if (powers.shield > 0 && y < BUCKET_TOP + 0.6 && y > 0.3 && dxItem < 1.5) {
+          remove = true;
+          points += 3;
+          popup('Blocked! +3', x, 3.2, '#4dffc3');
+          splash(x, 2.9, '#4dffc3', 12);
+          beep(1500, 0.06, 'square', 0.08);
+          updateHud();
+        } else if (invulnerable <= 0 && y < BUCKET_TOP + 0.2 && y > 0.3 && dxItem < 0.45) {
           remove = true;
           loseLife(x);
         }
-      } else if (y < BUCKET_TOP + 0.1 && y > BUCKET_TOP - 0.35 && dxItem < BUCKET_RADIUS + 0.08) {
+      } else if (y < BUCKET_TOP + 0.1 && y > BUCKET_TOP - 0.35 && dxItem < catchRadius) {
         remove = true;
-        const points = it.kind === 'gold' ? 5 : 1;
-        drops += points;
-        splash(x, BUCKET_TOP, it.kind === 'gold' ? '#ffcc33' : '#7fd0ff', it.kind === 'gold' ? 14 : 6);
-        beep(it.kind === 'gold' ? 1046 : 520 + Math.min(drops, 60) * 6, 0.07, 'triangle', 0.12);
-        setWaterLevel(character, drops / 60);
-        updateHud();
+        if (it.kind === 'drop' || it.kind === 'gold') catchDrop(it.kind, x);
+        else catchPickup(it.kind, x);
       }
-      if (y < 0.05) {
+      if (!remove && y < 0.05) {
         remove = true;
-        if (it.kind !== 'bolt') splash(x, 0.05, '#9cc9ff', 4);
+        if (it.kind === 'drop' || it.kind === 'gold') splash(x, 0.05, '#9cc9ff', 4);
       }
       if (remove) {
         scene.remove(it.mesh);

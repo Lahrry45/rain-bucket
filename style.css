@@ -44,6 +44,36 @@ html, body {
 .hud b { font-size: 20px; font-variant-numeric: tabular-nums; }
 .hud .lives b { color: #ff6b6b; letter-spacing: 2px; }
 
+.hud .combo.hot b { color: #d8fd71; }
+
+/* active power-ups */
+.powers {
+  position: fixed; top: 78px; right: 16px; z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+.power {
+  padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
+  background: rgba(41, 42, 35, .85); font-variant-numeric: tabular-nums;
+}
+.power.shield { color: #4dffc3; }
+.power.bigbucket { color: #ffb366; }
+.power.double { color: #d9a6ff; }
+
+/* floating points */
+.pop-layer { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.pop {
+  position: absolute; transform: translate(-50%, -50%);
+  font-weight: 900; font-size: 22px; white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .6);
+  animation: pop-up .9s ease-out forwards;
+}
+.pop.big { font-size: 34px; animation-duration: 1.4s; }
+@keyframes pop-up {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); }
+  15% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -220%) scale(1); }
+}
+
 /* lightning flash */
 .flash {
   position: fixed; inset: 0; z-index: 4; pointer-events: none;
@@ -72,6 +102,9 @@ html, body {
 .dot.gold { background: #ffcc33; }
 .dot.bolt { background: #fff35c; border-radius: 2px; transform: skewX(-20deg); }
 .controls { font-size: 14px; opacity: .8; }
+.bonuses { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; font-size: 13px; text-align: left; }
+.bonuses li { display: flex; gap: 8px; padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, .05); line-height: 1.35; }
+.bonuses b { flex: 0 0 92px; color: #d8fd71; }
 kbd {
   display: inline-block; padding: 1px 6px; border-radius: 4px;
   background: rgba(255, 255, 255, .12); font-family: inherit; font-size: 12px;
@@ -97,6 +130,7 @@ button.primary:hover { filter: brightness(1.05); }
   .startng-card img { width: 34px; height: 34px; }
   .startng-card span { display: none; }
   .hud { top: auto; bottom: 12px; right: 50%; transform: translateX(50%); }
-  .hud .stat { min-width: 64px; }
+  .hud .stat { min-width: 58px; padding: 6px 8px; }
+  .powers { top: 60px; right: 10px; }
   .panel h1 { font-size: 32px; }
 }
