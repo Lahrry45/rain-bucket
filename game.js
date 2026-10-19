@@ -511,7 +511,7 @@ async function gameOver() {
   shieldBubble.visible = false;
   setBigBucket(false);
   updatePowersHud();
-  if (points > readBest()) writeBest(points);
+  if (!demo && points > readBest()) writeBest(points);
 
   const seconds = Math.floor(elapsed);
   const saved = $('over-saved');
@@ -607,7 +607,8 @@ if (demo) {
   badge.className = 'demo-badge';
   badge.textContent = 'Auto-play demo';
   document.body.append(badge);
-  setTimeout(startGame, 3500);
+  // lets a recorder step the game one frame at a time (see README: demo videos)
+  window.rainBucketDemo = { tick };
 }
 
 function loseLife(x) {
@@ -644,6 +645,8 @@ function tick() {
 
   const { legs, bucket } = character.userData;
   let moving = 0;
+
+  if (demo && state === 'menu' && t > 3.5) startGame();
 
   if (state === 'playing') {
     elapsed += dt;
