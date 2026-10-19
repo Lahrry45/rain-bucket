@@ -1,0 +1,8 @@
+{
+  "leaderboard": {
+    "stats": [
+      { "key": "drops", "label": "Drops caught", "order": "highest" },
+      { "key": "seconds", "label": "Time survived", "order": "highest", "format": "time" }
+    ]
+  }
+}

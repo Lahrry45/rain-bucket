@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Rain Bucket</title>
+  <meta name="description" content="Catch the rain on a Lagos rooftop as your start.ng character. Dodge the lightning!">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- start.ng profile card -->
+  <div class="startng-card" id="player-card">
+    <img id="player-face" alt="">
+    <div>
+      <b id="player-name">Guest</b>
+      <span id="player-account">Not signed in</span>
+    </div>
+    <button id="player-sign-in">Sign in</button>
+  </div>
+
+  <div class="hud" id="hud" hidden>
+    <div class="stat"><span>Drops</span><b id="hud-drops">0</b></div>
+    <div class="stat"><span>Time</span><b id="hud-time">0:00</b></div>
+    <div class="stat lives"><span>Lives</span><b id="hud-lives">❤❤❤</b></div>
+  </div>
+
+  <div class="flash" id="flash"></div>
+
+  <section class="panel" id="menu">
+    <h1>Rain Bucket</h1>
+    <p class="tagline">It's raining on the rooftop. Catch every drop you can, and stay away from the lightning.</p>
+    <ul class="howto">
+      <li><i class="dot blue"></i> Raindrop: +1</li>
+      <li><i class="dot gold"></i> Golden drop: +5</li>
+      <li><i class="dot bolt"></i> Lightning: lose a life</li>
+    </ul>
+    <p class="controls">Move with <kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd>, or drag your finger / mouse.</p>
+    <button class="primary" id="start-btn">Play</button>
+    <p class="best" id="menu-best"></p>
+  </section>
+
+  <section class="panel" id="over" hidden>
+    <h2>Game over</h2>
+    <p class="result"><b id="over-drops">0</b> drops in <b id="over-time">0:00</b></p>
+    <p class="saved" id="over-saved"></p>
+    <button class="primary" id="again-btn">Play again</button>
+    <h3>Leaderboard</h3>
+    <ol class="board" id="board"><li class="muted">Loading…</li></ol>
+  </section>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
