@@ -74,6 +74,12 @@ html, body {
   100% { opacity: 0; transform: translate(-50%, -220%) scale(1); }
 }
 
+.demo-badge {
+  position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 5;
+  padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: rgba(41, 42, 35, .75); color: #d8fd71; letter-spacing: .04em;
+}
+
 /* lightning flash */
 .flash {
   position: fixed; inset: 0; z-index: 4; pointer-events: none;
@@ -132,5 +138,6 @@ button.primary:hover { filter: brightness(1.05); }
   .hud { top: auto; bottom: 12px; right: 50%; transform: translateX(50%); }
   .hud .stat { min-width: 58px; padding: 6px 8px; }
   .powers { top: 60px; right: 10px; }
+  .demo-badge { bottom: 76px; }
   .panel h1 { font-size: 32px; }
 }

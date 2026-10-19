@@ -4,6 +4,8 @@ import { buildCharacter, setWaterLevel, BUCKET_TOP, BUCKET_RADIUS, BUCKET_Y } fr
 
 const $ = (id) => document.getElementById(id);
 const onStartNg = location.hostname.endsWith('.start.ng');
+// ?demo: the game plays itself (for demo videos). Demo runs are never saved.
+const demo = new URLSearchParams(location.search).has('demo');
 
 // ---------- Scene ----------
 const canvas = $('game');
@@ -245,11 +247,12 @@ const items = [];
 const splashes = [];
 const splashGeo = new THREE.SphereGeometry(0.05, 6, 4);
 
-function spawn() {
+function spawn(forced) {
   const roll = Math.random();
   const boltChance = Math.min(0.36, 0.12 + elapsed * 0.006);
   let kind = 'drop';
-  if (roll < boltChance) kind = 'bolt';
+  if (forced) kind = forced;
+  else if (roll < boltChance) kind = 'bolt';
   else if (roll < boltChance + 0.08) kind = 'gold';
   else if (elapsed > 8 && roll < boltChance + 0.08 + 0.06) {
     // a bonus pickup; hearts only when a life is missing
@@ -483,6 +486,7 @@ function startGame() {
   invulnerable = 0;
   combo = 0;
   comboTimer = 0;
+  demoNext = 0;
   fill = 0;
   for (const k in powers) powers[k] = 0;
   setBigBucket(false);
@@ -511,7 +515,9 @@ async function gameOver() {
 
   const seconds = Math.floor(elapsed);
   const saved = $('over-saved');
-  if (!onStartNg) {
+  if (demo) {
+    saved.textContent = 'Auto-play demo: this score is not saved.';
+  } else if (!onStartNg) {
     saved.textContent = 'Play on rain-bucket.start.ng to save your score.';
   } else if (!reply?.user) {
     saved.innerHTML = '';
@@ -558,6 +564,52 @@ async function loadBoard() {
 $('start-btn').onclick = startGame;
 $('again-btn').onclick = startGame;
 
+// ---------- Auto-play demo ----------
+// Shows off each bonus at a set time, plays well for a while, then stops dodging so the round ends.
+const DEMO_BONUSES = [[4, 'double'], [12, 'bigbucket'], [20, 'shield'], [28, 'heart']];
+const DEMO_TIRED_AT = 40;
+let demoNext = 0;
+
+function demoTarget() {
+  const cx = character.position.x;
+  while (demoNext < DEMO_BONUSES.length && elapsed >= DEMO_BONUSES[demoNext][0]) {
+    spawn(DEMO_BONUSES[demoNext][1]);
+    items[items.length - 1].mesh.position.x = THREE.MathUtils.clamp(cx + (Math.random() < 0.5 ? -2 : 2), -playHalf, playHalf);
+    demoNext += 1;
+  }
+  const bolts = items.filter((it) => it.kind === 'bolt' && it.mesh.position.y > 0.5 && it.mesh.position.y < BUCKET_TOP + 3);
+  if (elapsed > DEMO_TIRED_AT && bolts.length) return bolts[0].mesh.position.x;
+  // best thing to catch: reachable in time, pickups and gold first, then whatever lands soonest
+  let best = null;
+  let bestScore = -Infinity;
+  for (const it of items) {
+    if (it.kind === 'bolt' || it.mesh.position.y < BUCKET_TOP) continue;
+    const timeLeft = (it.mesh.position.y - BUCKET_TOP) / it.speed;
+    const dist = Math.abs(it.mesh.position.x - cx);
+    if (dist > 8.5 * timeLeft + 0.3) continue;
+    const value = it.kind === 'drop' ? 1 : it.kind === 'gold' ? 4 : 8;
+    const score = value * 2 - timeLeft * 3 - dist * 0.3;
+    if (score > bestScore) { bestScore = score; best = it; }
+  }
+  let target = best ? best.mesh.position.x : cx;
+  if (powers.shield <= 0) {
+    for (const b of bolts) {
+      const bx = b.mesh.position.x;
+      const near = (x) => Math.abs(x - bx) < 0.9;
+      if (near(target) || near(cx)) target = bx + (cx >= bx ? 1.4 : -1.4);
+    }
+  }
+  return THREE.MathUtils.clamp(target, -playHalf, playHalf);
+}
+
+if (demo) {
+  const badge = document.createElement('div');
+  badge.className = 'demo-badge';
+  badge.textContent = 'Auto-play demo';
+  document.body.append(badge);
+  setTimeout(startGame, 3500);
+}
+
 function loseLife(x) {
   lives -= 1;
   breakCombo();
@@ -601,6 +653,7 @@ function tick() {
     let dx = 0;
     if (keys.left) dx -= speed * dt;
     if (keys.right) dx += speed * dt;
+    if (demo) pointerX = demoTarget();
     if (!dx && pointerX !== null) {
       const diff = pointerX - character.position.x;
       dx = Math.sign(diff) * Math.min(Math.abs(diff), speed * 1.3 * dt);
