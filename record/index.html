@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rain Bucket: record a demo</title>
+  <style>
+    body { margin: 0; padding: 24px 16px; background: #1d2433; color: #fffefa; font-family: system-ui, -apple-system, sans-serif; text-align: center; }
+    h1 { margin: 0 0 8px; color: #8fd3ff; }
+    p { margin: 0 0 16px; opacity: .85; line-height: 1.45; }
+    button { padding: 12px 32px; border: 0; border-radius: 999px; background: #d8fd71; color: #292a23; font-size: 18px; font-weight: 800; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    #status { margin: 16px 0; font-variant-numeric: tabular-nums; min-height: 1.5em; }
+    .stage { width: min(960px, 100%); aspect-ratio: 16 / 9; margin: 0 auto; overflow: hidden; border-radius: 12px; background: #000; position: relative; }
+    .stage iframe { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; border: 0; transform-origin: 0 0; }
+    video { width: min(960px, 100%); border-radius: 12px; display: none; margin: 0 auto 16px; }
+  </style>
+</head>
+<body>
+  <h1>Record a Rain Bucket demo</h1>
+  <p>Makes a 60-second 1280×720 video of the auto-play demo, with your start.ng character.<br>Sign in on start.ng first. The demo's score is not saved.</p>
+  <button id="go">Record</button>
+  <div id="status"></div>
+  <video id="preview" controls muted></video>
+  <button id="save" hidden>Download video</button>
+  <div class="stage" id="stage"></div>
+
+  <script type="module">
+    import { Muxer, ArrayBufferTarget } from 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/+esm';
+
+    const W = 1280, H = 720, FPS = 30, SECONDS = 60;
+    const status = document.getElementById('status');
+    const stage = document.getElementById('stage');
+    const fit = () => { const f = stage.querySelector('iframe'); if (f) f.style.transform = `scale(${stage.clientWidth / W})`; };
+    addEventListener('resize', fit);
+
+    async function record() {
+      stage.replaceChildren();
+      const frame = document.createElement('iframe');
+      frame.src = '../?demo&r=' + Date.now();
+      await new Promise((r) => { frame.onload = r; stage.append(frame); fit(); });
+      const w = frame.contentWindow, d = frame.contentDocument;
+
+      // Drive the game's clock from here, one frame at a time.
+      let fake = w.performance.now();
+      w.performance.now = () => fake;
+      let queue = [];
+      w.requestAnimationFrame = (cb) => { if (!queue.includes(cb)) queue.push(cb); return 1; };
+      w.AudioContext = undefined; w.webkitAudioContext = undefined;
+      for (let i = 0; i < 100 && !w.rainBucketDemo; i++) await new Promise((r) => setTimeout(r, 50));
+      if (!w.rainBucketDemo) throw new Error('The game did not load in demo mode.');
+      if (!queue.includes(w.rainBucketDemo.tick)) queue.push(w.rainBucketDemo.tick);
+      status.textContent = 'Asking start.ng who is playing…';
+      for (let i = 0; i < 60 && d.getElementById('player-name').textContent === 'Guest'; i++) await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 600));
+
+      const out = document.createElement('canvas');
+      out.width = W; out.height = H;
+      const ctx = out.getContext('2d');
+      const game = d.getElementById('game');
+      const pops = new Map();
+      new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains('pop')) pops.set(n, fake); })
+        .observe(d.querySelector('.pop-layer'), { childList: true });
+      let flashAt = -1e9, lastHearts = 3;
+      const k = W / w.innerWidth, ky = H / w.innerHeight;
+
+      function roundRect(x, y, wd, h, r) {
+        r = Math.max(0, Math.min(r, wd / 2, h / 2));
+        ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + wd, y, x + wd, y + h, r); ctx.arcTo(x + wd, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + wd, y, r); ctx.closePath();
+      }
+      const cs = (el) => w.getComputedStyle(el);
+      const visible = (el) => { const c = cs(el); return !el.hidden && c.display !== 'none' && c.visibility !== 'hidden'; };
+      function opacityOf(el) { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) o *= +cs(e).opacity; return o; }
+      // Draws the game's on-screen text and boxes (HUD, profile card, menus) onto the video frame.
+      function paint(el) {
+        if (!el || !visible(el)) return;
+        const c = cs(el), r = el.getBoundingClientRect(), op = opacityOf(el);
+        if (el.tagName === 'IMG') {
+          if (el.getAttribute('src') && el.complete && el.naturalWidth) {
+            ctx.save(); ctx.globalAlpha = op;
+            roundRect(r.left * k, r.top * ky, r.width * k, r.height * ky, Math.min(r.width, r.height) / 2 * k);
+            ctx.clip(); ctx.fillStyle = c.backgroundColor; ctx.fill();
+            ctx.drawImage(el, r.left * k, r.top * ky, r.width * k, r.height * ky);
+            ctx.restore();
+          }
+          return;
+        }
+        const bg = c.backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+          ctx.save(); ctx.globalAlpha = op; ctx.fillStyle = bg;
+          let rad = c.borderTopLeftRadius;
+          rad = rad.endsWith('%') ? Math.min(r.width, r.height) / 2 : parseFloat(rad) || 0;
+          roundRect(r.left * k, r.top * ky, r.width * k, r.height * ky, rad * k); ctx.fill();
+          if (parseFloat(c.borderTopWidth) > 0) { ctx.strokeStyle = c.borderTopColor; ctx.lineWidth = parseFloat(c.borderTopWidth) * k; ctx.stroke(); }
+          ctx.restore();
+        }
+        for (const child of el.childNodes) {
+          if (child.nodeType === 1) paint(child);
+          else if (child.nodeType === 3 && child.textContent.trim()) paintText(child, c, op);
+        }
+      }
+      function paintText(node, c, op) {
+        ctx.save(); ctx.globalAlpha = op; ctx.fillStyle = c.color;
+        ctx.font = `${c.fontWeight} ${parseFloat(c.fontSize) * k}px ${c.fontFamily}`;
+        ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+        const upper = c.textTransform === 'uppercase', range = d.createRange(), re = /\S+/g;
+        let m;
+        while ((m = re.exec(node.textContent))) {
+          range.setStart(node, m.index); range.setEnd(node, m.index + m[0].length);
+          const rr = range.getBoundingClientRect();
+          if (!rr.width) continue;
+          ctx.fillText(upper ? m[0].toUpperCase() : m[0], (rr.left + rr.width / 2) * k, (rr.top + rr.height / 2) * ky, rr.width * k * 1.02);
+        }
+        ctx.restore();
+      }
+      // The floating "+5" messages, animated on the game clock (same curve as style.css).
+      function paintPops() {
+        for (const [el, born] of pops) {
+          const big = el.classList.contains('big'), p = (fake - born) / (big ? 1400 : 900);
+          if (p >= 1) { pops.delete(el); continue; }
+          const size = big ? 34 : 22, h = size * 1.2;
+          let opacity, ty, scale;
+          if (p < 0.15) { const q = p / 0.15; opacity = q; ty = -0.3 - 0.3 * q; scale = 0.7 + 0.4 * q; }
+          else { const q = 1 - Math.pow(1 - (p - 0.15) / 0.85, 2); opacity = 1 - q; ty = -0.6 - 1.6 * q; scale = 1.1 - 0.1 * q; }
+          ctx.save(); ctx.globalAlpha = Math.max(0, opacity);
+          ctx.font = `900 ${size * scale * k}px system-ui, -apple-system, sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 6 * k; ctx.shadowOffsetY = 2 * k;
+          ctx.fillStyle = el.style.color || '#fffefa';
+          ctx.fillText(el.textContent, parseFloat(el.style.left) * k, (parseFloat(el.style.top) + ty * h + h / 2) * ky);
+          ctx.restore();
+        }
+      }
+
+      const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H }, fastStart: 'in-memory' });
+      let encErr = null;
+      const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => { encErr = e; } });
+      enc.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 6_000_000, framerate: FPS });
+
+      const total = SECONDS * FPS;
+      for (let f = 0; f < total; f++) {
+        fake += 1000 / FPS;
+        const q = queue; queue = [];
+        for (const cb of q) cb(fake);
+        await null;
+        const hearts = (d.getElementById('hud-lives').textContent.match(/❤/g) || []).length;
+        if (!d.getElementById('hud').hidden && hearts < lastHearts) flashAt = fake;
+        lastHearts = hearts;
+
+        ctx.drawImage(game, 0, 0, W, H);
+        for (const id of ['player-card', 'hud', 'powers']) paint(d.getElementById(id));
+        paint(d.querySelector('.demo-badge'));
+        paintPops();
+        for (const id of ['menu', 'over']) paint(d.getElementById(id));
+        const fl = 1 - (fake - flashAt) / 350;
+        if (fl > 0) { ctx.fillStyle = `rgba(255,255,255,${0.75 * fl})`; ctx.fillRect(0, 0, W, H); }
+
+        const vf = new VideoFrame(out, { timestamp: Math.round(f * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+        enc.encode(vf, { keyFrame: f % 60 === 0 });
+        vf.close();
+        if (encErr) throw encErr;
+        while (enc.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 5));
+        if (f % 10 === 0) {
+          status.textContent = `Recording… ${Math.round((f / total) * 100)}%`;
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+      await enc.flush();
+      muxer.finalize();
+      return new Blob([muxer.target.buffer], { type: 'video/mp4' });
+    }
+
+    const go = document.getElementById('go');
+    const save = document.getElementById('save');
+    const preview = document.getElementById('preview');
+    go.onclick = async () => {
+      go.disabled = true;
+      save.hidden = true;
+      try {
+        const blob = await record();
+        const url = URL.createObjectURL(blob);
+        preview.src = url;
+        preview.style.display = 'block';
+        stage.replaceChildren();
+        stage.style.display = 'none';
+        save.hidden = false;
+        save.onclick = () => {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'rain-bucket-demo-silent.mp4';
+          a.click();
+        };
+        status.textContent = `Done: ${(blob.size / 1e6).toFixed(1)} MB. Check it below, then click Download video.`;
+      } catch (e) {
+        status.textContent = 'Something went wrong: ' + e.message;
+      }
+      go.disabled = false;
+    };
+  </script>
+</body>
+</html>
